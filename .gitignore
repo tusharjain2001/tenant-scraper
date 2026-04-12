@@ -1,0 +1,8 @@
+output/
+node_modules/
+module2-email-sender/node_modules/
+module2-email-sender/contacts.db
+*.db
+__pycache__/
+*.pyc
+.env
