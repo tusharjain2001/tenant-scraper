@@ -1,31 +1,34 @@
 // ============================================================
 // MODULE 2 — COLD EMAIL SENDER — CONFIG
+// Credentials loaded from .env (never hardcoded here)
 // ============================================================
 
+const e = process.env;
+
 module.exports = {
-  // ── SMTP settings — from tenant-backend .env ─────────────
+  // ── SMTP — loaded from .env ───────────────────────────────
   SMTP: {
-    host:   "smtpout.secureserver.net",
-    port:   587,
-    secure: false,
+    host:   e.SMTP_HOST,
+    port:   parseInt(e.SMTP_PORT || "587"),
+    secure: e.SMTP_SECURE === "true",
     auth: {
-      user: "support@prophives.com",
-      pass: "Fiveloops@12345",
+      user: e.SMTP_USER,
+      pass: e.SMTP_PASS,
     },
   },
 
   // ── Your sender identity ─────────────────────────────────
-  FROM_EMAIL: "support@prophives.com",
-  FROM_NAME:  "Tushar from Prophives",
+  FROM_EMAIL: e.FROM_EMAIL,
+  FROM_NAME:  e.FROM_NAME || "Tushar from Prophives",
 
-  // ── IMAP — saves sent emails to Sent folder in Titan ────────
+  // ── IMAP — saves sent emails to Sent folder in Titan ─────
   IMAP: {
-    host:   "imap.secureserver.net",
-    port:   993,
-    secure: true,
+    host:   e.IMAP_HOST,
+    port:   parseInt(e.IMAP_PORT || "993"),
+    secure: e.IMAP_SECURE !== "false",
     auth: {
-      user: "support@prophives.com",
-      pass: "Fiveloops@12345",
+      user: e.IMAP_USER,
+      pass: e.IMAP_PASS,
     },
   },
   IMAP_SENT_FOLDER: "Sent",
