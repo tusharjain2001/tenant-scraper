@@ -1,28 +1,19 @@
 #!/usr/bin/env python3
 """
-Tenant Scraper — Property Management Agency Contact Finder
-Pulls agency name, phone, email, website into CSV files in ./output/
-
-Primary method: Google Maps Places API (most reliable, no CAPTCHA)
-  → Searches for real estate/letting agencies by city
-  → Returns phone + email per agency
+Lead Ops Scraper — multi-market agency + owner lead finder
 
 Usage:
-    python main.py                  # Run Google Maps scraper (recommended)
-    python main.py --sites maps     # Same as above
-    python main.py --sites pf       # Property Finder (may be blocked)
-    python main.py --sites bayut    # Bayut (may be blocked)
-    python main.py --sites zoopla   # Zoopla (may be blocked)
-    python main.py --sites maps pf  # Multiple
-
-Setup (Google Maps):
-    1. Go to https://console.cloud.google.com/
-    2. Create a project → Enable "Places API"
-    3. Create an API key → paste it in config.py as GOOGLE_MAPS_API_KEY
-    Free tier: $200/month credit (~28,000 searches — more than enough)
+    python main.py                              # Dubai agencies (default)
+    python main.py --market uk                  # UK agencies
+    python main.py --market us                  # US agencies (Google Maps)
+    python main.py --market us --lead-type owner              # US owners (Apify)
+    python main.py --market us --lead-type owner --csv data.csv  # US owners from CSV
+    python main.py --market all                 # Dubai + UK + US agencies
+    python main.py --sites maps pf              # Legacy: multiple scrapers
 """
 
 import argparse
+import importlib
 import os
 import sys
 from datetime import datetime
@@ -34,112 +25,130 @@ from rich.table import Table
 console = Console()
 
 SITE_MAP = {
-    "maps": ("google_maps", "scrapers.google_maps"),
-    "pf": ("propertyfinder", "scrapers.propertyfinder"),
-    "bayut": ("bayut", "scrapers.bayut"),
-    "zoopla": ("zoopla", "scrapers.zoopla"),
+    "maps":  ("google_maps",    "scrapers.google_maps"),
+    "pf":    ("propertyfinder", "scrapers.propertyfinder"),
+    "bayut": ("bayut",          "scrapers.bayut"),
+    "zoopla": ("zoopla",        "scrapers.zoopla"),
 }
 
+MARKETS = ["dubai", "uk", "us"]
 
-def save_csv(contacts: list[dict], site_name: str, output_dir: str) -> str:
+
+def save_csv(contacts, name, output_dir):
     os.makedirs(output_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = os.path.join(output_dir, f"{site_name}_{timestamp}.csv")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(output_dir, f"{name}_{ts}.csv")
     df = pd.DataFrame(contacts)
     if "phone" in df.columns:
         df = df.drop_duplicates(subset=["phone"], keep="first")
-    df.to_csv(filename, index=False)
-    return filename
+    df.to_csv(path, index=False, encoding="utf-8")
+    return path
 
 
-def save_combined_csv(all_contacts: list[dict], output_dir: str) -> str:
+def save_combined(all_contacts, output_dir):
     os.makedirs(output_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = os.path.join(output_dir, f"all_contacts_{timestamp}.csv")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(output_dir, f"all_contacts_{ts}.csv")
     df = pd.DataFrame(all_contacts)
     if "phone" in df.columns:
         df = df.drop_duplicates(subset=["phone"], keep="first")
-    # Sort: contacts with email first
     if "email" in df.columns:
-        df["_has_email"] = df["email"].astype(bool)
-        df = df.sort_values("_has_email", ascending=False).drop(columns=["_has_email"])
-    df.to_csv(filename, index=False)
-    return filename
+        df["_has"] = df["email"].astype(bool)
+        df = df.sort_values("_has", ascending=False).drop(columns=["_has"])
+    df.to_csv(path, index=False, encoding="utf-8")
+    return path
 
 
-def print_summary(all_contacts: list[dict]):
-    table = Table(title="Scraping Summary", show_lines=True)
-    table.add_column("Source", style="cyan")
-    table.add_column("Contacts", style="green", justify="right")
-    table.add_column("With Phone", style="yellow", justify="right")
-    table.add_column("With Email", style="magenta", justify="right")
+def print_summary(contacts):
+    t = Table(title="Scrape Summary", show_lines=True)
+    t.add_column("Market", style="cyan")
+    t.add_column("Lead Type", style="blue")
+    t.add_column("Total", justify="right", style="green")
+    t.add_column("Phone", justify="right", style="yellow")
+    t.add_column("Email", justify="right", style="magenta")
 
-    sources = {}
-    for c in all_contacts:
-        src = c.get("source", "unknown")
-        if src not in sources:
-            sources[src] = {"total": 0, "phone": 0, "email": 0}
-        sources[src]["total"] += 1
-        if c.get("phone"):
-            sources[src]["phone"] += 1
-        if c.get("email"):
-            sources[src]["email"] += 1
+    groups = {}
+    for c in contacts:
+        key = (c.get("market", "?"), c.get("lead_type", "?"))
+        if key not in groups:
+            groups[key] = {"total": 0, "phone": 0, "email": 0}
+        groups[key]["total"] += 1
+        if c.get("phone"): groups[key]["phone"] += 1
+        if c.get("email"): groups[key]["email"] += 1
 
-    total_contacts = total_phone = total_email = 0
-    for src, stats in sources.items():
-        table.add_row(src, str(stats["total"]), str(stats["phone"]), str(stats["email"]))
-        total_contacts += stats["total"]
-        total_phone += stats["phone"]
-        total_email += stats["email"]
+    totals = {"total": 0, "phone": 0, "email": 0}
+    for (market, lt), s in sorted(groups.items()):
+        t.add_row(market, lt, str(s["total"]), str(s["phone"]), str(s["email"]))
+        for k in totals: totals[k] += s[k]
 
-    table.add_row(
-        "[bold]TOTAL[/bold]",
-        f"[bold]{total_contacts}[/bold]",
-        f"[bold]{total_phone}[/bold]",
-        f"[bold]{total_email}[/bold]",
-    )
-    console.print(table)
+    t.add_row("[bold]TOTAL[/bold]", "", f"[bold]{totals['total']}[/bold]",
+              f"[bold]{totals['phone']}[/bold]", f"[bold]{totals['email']}[/bold]")
+    console.print(t)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Property agency contact scraper")
-    parser.add_argument(
-        "--sites",
-        nargs="+",
-        choices=list(SITE_MAP.keys()),
-        default=["maps"],
-        help="Which scrapers to run (default: maps)",
-    )
-    parser.add_argument("--output", default="output", help="Output directory (default: output)")
+    parser = argparse.ArgumentParser(description="Lead Ops Scraper")
+    parser.add_argument("--market", default="dubai",
+                        choices=MARKETS + ["all"],
+                        help="Target market: dubai | uk | us | all")
+    parser.add_argument("--lead-type", default="agency",
+                        choices=["agency", "owner"],
+                        help="Lead type: agency | owner")
+    parser.add_argument("--csv", default=None,
+                        help="CSV path for owner CSV import (--lead-type owner)")
+    parser.add_argument("--output", default="output",
+                        help="Output directory (default: output)")
+    # Legacy multi-site support
+    parser.add_argument("--sites", nargs="+", choices=list(SITE_MAP.keys()),
+                        help="Legacy: specific scrapers to run")
     args = parser.parse_args()
 
-    console.print("[bold green]Tenant Scraper[/bold green] — starting up\n")
-    console.print(f"Sites: [cyan]{', '.join(args.sites)}[/cyan]")
-    console.print(f"Output: [cyan]{args.output}/[/cyan]\n")
+    console.print("[bold green]Lead Ops Scraper[/bold green] — starting\n")
 
     all_contacts = []
 
-    for key in args.sites:
-        site_name, module_path = SITE_MAP[key]
-        console.rule(f"[bold]{site_name.upper()}[/bold]")
-        try:
-            import importlib
-            mod = importlib.import_module(module_path)
-            contacts = mod.run()
+    # ── Legacy --sites mode ────────────────────────────────────────────────────
+    if args.sites:
+        for key in args.sites:
+            site_name, module_path = SITE_MAP[key]
+            console.rule(f"[bold]{site_name.upper()}[/bold]")
+            try:
+                mod = importlib.import_module(module_path)
+                contacts = mod.run()
+                if contacts:
+                    path = save_csv(contacts, site_name, args.output)
+                    console.print(f"  Saved → [cyan]{path}[/cyan]")
+                    all_contacts.extend(contacts)
+            except Exception as e:
+                console.print(f"[red]{site_name} failed: {e}[/red]")
+                import traceback; traceback.print_exc()
+
+    # ── Market-based mode ──────────────────────────────────────────────────────
+    else:
+        markets = MARKETS if args.market == "all" else [args.market]
+
+        for market in markets:
+            console.rule(f"[bold]{market.upper()} — {args.lead_type}[/bold]")
+
+            if args.lead_type == "agency":
+                mod = importlib.import_module("scrapers.google_maps")
+                contacts = mod.run(market=market)
+
+            else:  # owner
+                mod = importlib.import_module("scrapers.owner_sources")
+                contacts = mod.run(csv_path=args.csv)
+
             if contacts:
-                path = save_csv(contacts, site_name, args.output)
-                console.print(f"  Saved to [cyan]{path}[/cyan]")
+                label = f"{market}_{args.lead_type}"
+                path  = save_csv(contacts, label, args.output)
+                console.print(f"  Saved → [cyan]{path}[/cyan]")
                 all_contacts.extend(contacts)
-        except Exception as e:
-            console.print(f"[red]Failed to run {site_name} scraper: {e}[/red]")
-            import traceback
-            traceback.print_exc()
 
     console.rule("[bold]DONE[/bold]")
 
     if all_contacts:
-        combined_path = save_combined_csv(all_contacts, args.output)
-        console.print(f"\nCombined CSV: [bold cyan]{combined_path}[/bold cyan]")
+        combined = save_combined(all_contacts, args.output)
+        console.print(f"\nCombined CSV → [bold cyan]{combined}[/bold cyan]")
         print_summary(all_contacts)
     else:
         console.print("[yellow]No contacts collected.[/yellow]")

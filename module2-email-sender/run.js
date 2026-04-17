@@ -1,123 +1,98 @@
 #!/usr/bin/env node
 /**
- * Module 2 — Cold Email Sender
+ * Module 2 — Cold Email Sender (Supabase-backed)
  *
  * Commands:
- *   node run.js import [csv-path]   Import contacts from Module 1 CSV
- *   node run.js send                Send today's batch (all 3 steps)
- *   node run.js send 1              Send only step 1
- *   node run.js send 2              Send only step 2
- *   node run.js send 3              Send only step 3
- *   node run.js status              Show stats summary
- *   node run.js server              Start open-tracking server
- *   node run.js schedule            Start cron scheduler (runs daily)
+ *   node --env-file=.env run.js import [csv-path]
+ *   node --env-file=.env run.js send [1|2|3]
+ *   node --env-file=.env run.js status
+ *   node --env-file=.env run.js server
+ *   node --env-file=.env run.js schedule
  */
 
 const config = require("./config");
-
 const [, , command, arg] = process.argv;
 
 async function main() {
   switch (command) {
 
-    // ── Import CSV ───────────────────────────────────────────
     case "import": {
       const { importCsv } = require("./importer");
       const csvPath = arg || config.DEFAULT_CSV_PATH;
-      importCsv(csvPath);
+      await importCsv(csvPath);
       break;
     }
 
-    // ── Send emails ──────────────────────────────────────────
     case "send": {
       if (!config.SMTP?.auth?.user || !config.SMTP?.auth?.pass) {
-        console.error("\nERROR: SMTP credentials missing in config.js\n");
+        console.error("\nERROR: SMTP credentials missing.\n");
         process.exit(1);
       }
       const { runAllSteps, runStep } = require("./mailer");
       if (arg) {
         const step = parseInt(arg);
-        if (![1, 2, 3].includes(step)) {
-          console.error("Step must be 1, 2, or 3");
-          process.exit(1);
-        }
+        if (![1, 2, 3].includes(step)) { console.error("Step must be 1, 2, or 3"); process.exit(1); }
         await runStep(step);
       } else {
         await runAllSteps();
       }
-      printStats();
+      await printStats();
       break;
     }
 
-    // ── Status ───────────────────────────────────────────────
     case "status": {
-      printStats();
+      await printStats();
       break;
     }
 
-    // ── Tracking server ──────────────────────────────────────
     case "server": {
       const { start } = require("./server");
       start();
       break;
     }
 
-    // ── Cron scheduler ───────────────────────────────────────
     case "schedule": {
-      if (config.SMTP.auth.user === "your@gmail.com") {
-        console.error("\nERROR: Set your SMTP credentials in config.js first.\n");
-        process.exit(1);
-      }
       const cron = require("node-cron");
       const { runAllSteps } = require("./mailer");
+      const { startPoller }  = require("./reply-poller");
+      const { start }        = require("./server");
 
-      console.log(`\nScheduler started. Will send at: ${config.SEND_CRON}`);
-      console.log("Press Ctrl+C to stop.\n");
+      console.log(`\nScheduler started — sends at: ${config.SEND_CRON}`);
+      console.log("Reply poller runs every 15 min. Press Ctrl+C to stop.\n");
 
-      // Also start tracking server in same process
-      const { start } = require("./server");
-      start();
+      start();        // tracking server
+      startPoller();  // IMAP reply detection
 
       cron.schedule(config.SEND_CRON, async () => {
         console.log(`\n[${new Date().toISOString()}] Running scheduled send...`);
         await runAllSteps();
-        printStats();
+        await printStats();
       });
 
-      // Run immediately once on startup
-      console.log("Running initial send...");
+      // Run once on startup
       await runAllSteps();
-      printStats();
+      await printStats();
       break;
     }
 
-    // ── Help ─────────────────────────────────────────────────
     default: {
       console.log(`
 Module 2 — Cold Email Sender
 
-Commands:
-  node run.js import [csv-path]   Import contacts from CSV
-  node run.js send                Send today's batch (all steps)
-  node run.js send 1              Send step 1 only
-  node run.js send 2              Send step 2 only
-  node run.js send 3              Send step 3 only
-  node run.js status              Show stats
-  node run.js server              Start tracking server
-  node run.js schedule            Run on cron + tracking server
-
-Setup:
-  1. Edit config.js — add SENDGRID_API_KEY and FROM_EMAIL
-  2. Run: node run.js import
-  3. Run: node run.js send
+  node --env-file=.env run.js import [csv-path]
+  node --env-file=.env run.js send           (all steps)
+  node --env-file=.env run.js send 1|2|3     (one step)
+  node --env-file=.env run.js status
+  node --env-file=.env run.js server
+  node --env-file=.env run.js schedule       (cron + tracker + reply-poller)
       `);
     }
   }
 }
 
-function printStats() {
-  const db = require("./db");
-  const s = db.getStats();
+async function printStats() {
+  const supa = require("./supabase");
+  const s    = await supa.getStats();
   console.log(`
 ╔══════════════════════════════════╗
 ║       EMAIL SEQUENCE STATS       ║
@@ -139,7 +114,7 @@ function printStats() {
   `);
 }
 
-main().catch((err) => {
+main().catch(err => {
   console.error("Fatal error:", err);
   process.exit(1);
 });

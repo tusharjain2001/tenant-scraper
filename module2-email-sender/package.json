@@ -4,17 +4,18 @@
   "description": "Cold email sender — 3-step sequence with tracking",
   "main": "run.js",
   "scripts": {
-    "import": "node run.js import",
-    "send": "node run.js send",
-    "status": "node run.js status",
-    "server": "node run.js server",
-    "start": "node run.js send"
+    "import": "node --env-file=.env --experimental-sqlite run.js import",
+    "send": "node --env-file=.env --experimental-sqlite run.js send",
+    "status": "node --env-file=.env --experimental-sqlite run.js status",
+    "server": "node --env-file=.env --experimental-sqlite run.js server",
+    "start": "node --env-file=.env --experimental-sqlite run.js send"
   },
   "dependencies": {
-    "@sendgrid/mail": "^8.1.3",
-    "better-sqlite3": "^9.4.3",
+    "@supabase/supabase-js": "^2.103.0",
     "csv-parse": "^5.5.3",
     "express": "^4.18.3",
-    "node-cron": "^3.0.3"
+    "imapflow": "^1.0.162",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.13"
   }
 }

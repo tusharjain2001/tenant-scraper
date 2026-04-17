@@ -1,3 +1,8 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # ============================================================
 # REQUIRED: Get a free Google Maps API key at:
 # https://console.cloud.google.com/
