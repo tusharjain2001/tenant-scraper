@@ -1,67 +1,78 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import * as api from "../api";
 import type { Summary } from "../types";
 
 function KpiCard({ label, value, sub }: { label: string; value: number | string; sub?: string }) {
   return (
-    <div className="bg-surface border border-border rounded-xl p-5">
-      <p className="text-muted text-xs font-medium uppercase tracking-wider mb-1">{label}</p>
+    <div className="rounded-xl border border-border bg-surface p-5">
+      <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted">{label}</p>
       <p className="text-3xl font-bold text-white">{value}</p>
-      {sub && <p className="text-muted text-xs mt-1">{sub}</p>}
+      {sub && <p className="mt-1 text-xs text-muted">{sub}</p>}
     </div>
   );
 }
 
 function ActionBtn({
-  label, onClick, disabled, disabledTip, loading, variant = "default",
+  label,
+  onClick,
+  disabled,
+  disabledTip,
+  loading,
+  variant = "default",
 }: {
-  label: string; onClick: () => void; disabled?: boolean; disabledTip?: string;
-  loading?: boolean; variant?: "default" | "accent";
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  disabledTip?: string;
+  loading?: boolean;
+  variant?: "default" | "accent";
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled || loading}
       title={disabled ? disabledTip : undefined}
-      className={`w-full py-3 px-4 rounded-xl font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+      className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
         variant === "accent"
           ? "bg-accent text-black hover:bg-yellow-400"
-          : "bg-white/5 border border-border text-white hover:bg-white/10"
+          : "border border-border bg-white/5 text-white hover:bg-white/10"
       }`}
     >
-      {loading ? "Working…" : label}
+      {loading ? "Working..." : label}
     </button>
   );
 }
 
 export default function DashboardPage() {
-  const [summary, setSummary]           = useState<Summary | null>(null);
+  const navigate = useNavigate();
+  const [summary, setSummary] = useState<Summary | null>(null);
   const [callsEnabled, setCallsEnabled] = useState(false);
-  const [loading, setLoading]           = useState(true);
+  const [loading, setLoading] = useState(true);
 
-  // Modal state
-  const [scrapeModal, setScrapeModal]   = useState(false);
+  const [scrapeModal, setScrapeModal] = useState(false);
   const [scrapeMarket, setScrapeMarket] = useState("dubai");
-  const [scrapeType, setScrapeType]     = useState("agency");
+  const [scrapeType, setScrapeType] = useState("agency");
 
-  // Action loading states
-  const [scraping, setScraping]   = useState(false);
-  const [emailing, setEmailing]   = useState(false);
-  const [calling, setCalling]     = useState(false);
+  const [scraping, setScraping] = useState(false);
+  const [emailing, setEmailing] = useState(false);
+  const [calling, setCalling] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  // Latest generated post
   const [latestPost, setLatestPost] = useState<any>(null);
-  const [toast, setToast]           = useState("");
+  const [toast, setToast] = useState("");
 
-  const showToast = (msg: string) => {
-    setToast(msg);
+  const showToast = (message: string) => {
+    setToast(message);
     setTimeout(() => setToast(""), 3500);
   };
 
   useEffect(() => {
     Promise.all([api.getSummary(), api.getCallStatus()])
-      .then(([s, c]) => { setSummary(s.summary); setCallsEnabled(c.configured); })
+      .then(([summaryResponse, callResponse]) => {
+        setSummary(summaryResponse.summary);
+        setCallsEnabled(callResponse.configured);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -71,8 +82,10 @@ export default function DashboardPage() {
     setScraping(true);
     try {
       await api.startScrape(scrapeMarket, scrapeType);
-      showToast(`Scraping ${scrapeMarket}/${scrapeType} started — check terminal for progress`);
-    } catch (e: any) { showToast(e.message); }
+      showToast(`Scraping ${scrapeMarket}/${scrapeType} started. Check the terminal for progress.`);
+    } catch (error: any) {
+      showToast(error.message);
+    }
     setScraping(false);
   };
 
@@ -80,105 +93,102 @@ export default function DashboardPage() {
     setEmailing(true);
     try {
       await api.startEmail();
-      showToast("Email batch started — check terminal for progress");
-    } catch (e: any) { showToast(e.message); }
+      showToast("Email batch started. Check the terminal for progress.");
+    } catch (error: any) {
+      showToast(error.message);
+    }
     setEmailing(false);
   };
 
   const doCalls = async () => {
     setCalling(true);
-    try {
-      const r = await api.queueCalls("us", 20);
-      showToast(`Queued ${r.queued} calls → sent to n8n`);
-    } catch (e: any) { showToast(e.message); }
+    navigate("/calls");
     setCalling(false);
   };
 
   const doGeneratePost = async () => {
     setGenerating(true);
     try {
-      const r = await api.generatePost("dubai");
-      setLatestPost(r.brief);
-      showToast("Post generated!");
-    } catch (e: any) { showToast(e.message); }
+      const response = await api.generatePost("dubai");
+      setLatestPost(response.brief);
+      showToast("Post generated.");
+    } catch (error: any) {
+      showToast(error.message);
+    }
     setGenerating(false);
   };
 
-  if (loading) return <div className="flex items-center justify-center h-full text-muted">Loading…</div>;
+  if (loading) {
+    return <div className="flex h-full items-center justify-center text-muted">Loading...</div>;
+  }
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-white mb-1">Dashboard</h1>
-      <p className="text-muted text-sm mb-8">Lead ops overview — Dubai · UK · US</p>
+    <div className="mx-auto max-w-6xl p-8">
+      <h1 className="mb-1 text-2xl font-bold text-white">Dashboard</h1>
+      <p className="mb-8 text-sm text-muted">Lead ops overview for Dubai, UK, and US.</p>
 
-      {/* KPI Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <KpiCard label="Total Leads"    value={summary?.leads.total ?? 0} />
-        <KpiCard label="Emails Today"   value={summary?.emails_today ?? 0} />
-        <KpiCard label="In Sequence"    value={summary?.leads.active ?? 0} />
-        <KpiCard label="Calls Queued"   value={summary?.calls_queued ?? 0} />
+      <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <KpiCard label="Total Leads" value={summary?.leads.total ?? 0} />
+        <KpiCard label="Emails Today" value={summary?.emails_today ?? 0} />
+        <KpiCard label="In Sequence" value={summary?.leads.active ?? 0} />
+        <KpiCard label="Calls Queued" value={summary?.calls_queued ?? 0} />
       </div>
 
-      {/* Market breakdown */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="mb-8 grid grid-cols-3 gap-4">
         <KpiCard label="Dubai Leads" value={summary?.by_market.dubai ?? 0} />
-        <KpiCard label="UK Leads"    value={summary?.by_market.uk ?? 0} />
-        <KpiCard label="US Leads"    value={summary?.by_market.us ?? 0} />
+        <KpiCard label="UK Leads" value={summary?.by_market.uk ?? 0} />
+        <KpiCard label="US Leads" value={summary?.by_market.us ?? 0} />
       </div>
 
-      {/* Sequence breakdown */}
-      <div className="grid grid-cols-3 gap-4 mb-10">
-        <KpiCard label="Replied"     value={summary?.leads.replied ?? 0} />
-        <KpiCard label="Done (3/3)"  value={summary?.leads.done ?? 0} />
-        <KpiCard label="Bounced"     value={summary?.leads.bounced ?? 0} />
+      <div className="mb-10 grid grid-cols-3 gap-4">
+        <KpiCard label="Replied" value={summary?.leads.replied ?? 0} />
+        <KpiCard label="Done (3/3)" value={summary?.leads.done ?? 0} />
+        <KpiCard label="Bounced" value={summary?.leads.bounced ?? 0} />
       </div>
 
-      {/* Action buttons */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <ActionBtn label="Scrape Leads"         onClick={() => setScrapeModal(true)} loading={scraping} variant="accent" />
-        <ActionBtn label="Start Emails"         onClick={doEmail}       loading={emailing} />
+      <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <ActionBtn label="Scrape Leads" onClick={() => setScrapeModal(true)} loading={scraping} variant="accent" />
+        <ActionBtn label="Start Emails" onClick={doEmail} loading={emailing} />
         <ActionBtn
-          label="Queue Calls (US)"
+          label={callsEnabled ? "Open Calls Workspace" : "Calls Setup"}
           onClick={doCalls}
           loading={calling}
-          disabled={!callsEnabled}
-          disabledTip="Set ELEVENLABS_API_KEY and N8N_WEBHOOK_URL in backend .env to enable calling"
         />
         <ActionBtn label="Generate Today's Post" onClick={doGeneratePost} loading={generating} />
       </div>
 
-      {/* Latest generated post */}
       {latestPost && (
-        <div className="bg-surface border border-border rounded-xl p-6 space-y-3">
+        <div className="space-y-3 rounded-xl border border-border bg-surface p-6">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-white">Latest Generated Post</h3>
-            <span className="text-xs text-muted px-2 py-0.5 bg-white/5 rounded-full">{latestPost.market}</span>
+            <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs text-muted">{latestPost.market}</span>
           </div>
-          <p className="text-sm text-gray-200 whitespace-pre-line">{latestPost.caption}</p>
+          <p className="whitespace-pre-line text-sm text-gray-200">{latestPost.caption}</p>
           <p className="text-xs text-accent">{latestPost.cta}</p>
           <div className="flex flex-wrap gap-1">
-            {(latestPost.hashtags || []).map((h: string) => (
-              <span key={h} className="text-xs text-muted bg-white/5 px-2 py-0.5 rounded">#{h}</span>
+            {(latestPost.hashtags || []).map((tag: string) => (
+              <span key={tag} className="rounded bg-white/5 px-2 py-0.5 text-xs text-muted">
+                #{tag}
+              </span>
             ))}
           </div>
-          <div className="pt-2 border-t border-border">
-            <p className="text-xs text-muted font-medium mb-1">Image prompt:</p>
-            <p className="text-xs text-gray-400 italic">{latestPost.image_prompt}</p>
+          <div className="border-t border-border pt-2">
+            <p className="mb-1 text-xs font-medium text-muted">Image prompt:</p>
+            <p className="text-xs italic text-gray-400">{latestPost.image_prompt}</p>
           </div>
         </div>
       )}
 
-      {/* Scrape modal */}
       {scrapeModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-surface border border-border rounded-2xl p-8 w-96 space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-96 space-y-5 rounded-2xl border border-border bg-surface p-8">
             <h3 className="text-lg font-bold text-white">Start Scrape</h3>
             <div>
-              <label className="text-xs text-muted mb-1 block">Market</label>
+              <label className="mb-1 block text-xs text-muted">Market</label>
               <select
                 value={scrapeMarket}
-                onChange={e => setScrapeMarket(e.target.value)}
-                className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-white text-sm"
+                onChange={event => setScrapeMarket(event.target.value)}
+                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-white"
               >
                 <option value="dubai">Dubai</option>
                 <option value="uk">UK</option>
@@ -187,27 +197,36 @@ export default function DashboardPage() {
               </select>
             </div>
             <div>
-              <label className="text-xs text-muted mb-1 block">Lead Type</label>
+              <label className="mb-1 block text-xs text-muted">Lead Type</label>
               <select
                 value={scrapeType}
-                onChange={e => setScrapeType(e.target.value)}
-                className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-white text-sm"
+                onChange={event => setScrapeType(event.target.value)}
+                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-white"
               >
                 <option value="agency">Agency</option>
                 <option value="owner">Owner</option>
               </select>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setScrapeModal(false)} className="flex-1 py-2 border border-border rounded-lg text-sm text-muted hover:text-white">Cancel</button>
-              <button onClick={doScrape} className="flex-1 py-2 bg-accent text-black rounded-lg text-sm font-semibold hover:bg-yellow-400">Start</button>
+              <button
+                onClick={() => setScrapeModal(false)}
+                className="flex-1 rounded-lg border border-border py-2 text-sm text-muted hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={doScrape}
+                className="flex-1 rounded-lg bg-accent py-2 text-sm font-semibold text-black hover:bg-yellow-400"
+              >
+                Start
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 bg-surface border border-border text-white text-sm px-5 py-3 rounded-xl shadow-xl z-50">
+        <div className="fixed bottom-6 right-6 z-50 rounded-xl border border-border bg-surface px-5 py-3 text-sm text-white shadow-xl">
           {toast}
         </div>
       )}

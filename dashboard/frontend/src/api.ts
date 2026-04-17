@@ -38,6 +38,12 @@ export const getEmailStatus = () => req<any>("/email/status");
 export const queueCalls  = (market: string, limit: number) =>
   req<any>("/calls/queue", { method: "POST", body: JSON.stringify({ market, limit }) });
 export const getCallStatus = () => req<any>("/calls/status");
+export const getCallToken = (identity: string) =>
+  req<any>("/calls/token", { method: "POST", body: JSON.stringify({ identity }) });
+export const getCallHistory = (params: Record<string, string> = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return req<any>(`/calls/history${qs ? "?" + qs : ""}`);
+};
 
 // ── Content ───────────────────────────────────────────────────────────────────
 export const generatePost   = (market: string, theme?: string) =>

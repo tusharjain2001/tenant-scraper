@@ -50,3 +50,44 @@ export interface Summary {
   emails_today: number;
   calls_queued: number;
 }
+
+export type CallUiState =
+  | "idle"
+  | "requesting access"
+  | "ready"
+  | "connecting"
+  | "ringing"
+  | "in-call"
+  | "ending"
+  | "ended"
+  | "failed";
+
+export interface CallHistoryItem {
+  id: string;
+  lead_id: string | null;
+  phone_e164: string | null;
+  outcome: string | null;
+  summary: string | null;
+  called_at: string;
+  twilio_call_sid: string | null;
+  status: string | null;
+  duration_seconds: number | null;
+  from_number: string | null;
+  agent_identity: string | null;
+  leads?: {
+    id: string;
+    agency_name: string | null;
+    owner_name: string | null;
+    city: string | null;
+    market: string | null;
+  } | null;
+}
+
+export interface CallStatus {
+  configured: boolean;
+  caller_id: string | null;
+  backend_url: string | null;
+  token_ttl_seconds: number;
+  errors: string[];
+  legacy_queue_configured: boolean;
+}

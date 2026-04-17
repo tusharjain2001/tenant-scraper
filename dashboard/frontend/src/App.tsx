@@ -2,10 +2,12 @@ import { Routes, Route, NavLink } from "react-router-dom";
 import DashboardPage from "./pages/DashboardPage";
 import LeadsPage     from "./pages/LeadsPage";
 import ContentPage   from "./pages/ContentPage";
+import CallsPage     from "./pages/CallsPage";
 
 const nav = [
   { to: "/",        label: "Dashboard" },
   { to: "/leads",   label: "Leads" },
+  { to: "/calls",   label: "Calls" },
   { to: "/content", label: "Content" },
 ];
 
@@ -46,6 +48,7 @@ export default function App() {
         <Routes>
           <Route path="/"        element={<DashboardPage />} />
           <Route path="/leads"   element={<LeadsPage />} />
+          <Route path="/calls"   element={<CallsPage />} />
           <Route path="/content" element={<ContentPage />} />
         </Routes>
       </main>
