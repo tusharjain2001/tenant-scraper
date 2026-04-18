@@ -1,0 +1,45 @@
+name: Deploy to Lightsail
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 65.2.108.154
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            set -e
+
+            cd /opt/leadops
+
+            # Pull latest code
+            git pull origin master
+
+            # Backend deps (only if package.json changed)
+            cd /opt/leadops/dashboard/backend
+            npm install --omit=dev
+
+            # Module2 deps
+            cd /opt/leadops/module2-email-sender
+            npm install --omit=dev
+
+            # Build frontend
+            cd /opt/leadops/dashboard/frontend
+            npm install
+            npm run build
+
+            # Copy built frontend to nginx root
+            sudo cp -r dist/* /var/www/leadops/
+
+            # Restart backend (preserves .env on disk)
+            pm2 restart leadops-backend
+            pm2 save
+
+            echo "Deploy complete"
