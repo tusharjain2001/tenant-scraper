@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import * as api from "../api";
 import type { Summary } from "../types";
@@ -44,6 +44,19 @@ function ActionBtn({
   );
 }
 
+function ScrapeStatusBadge({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    running: "bg-yellow-500/20 text-yellow-300",
+    done:    "bg-green-500/20 text-green-300",
+    error:   "bg-red-500/20 text-red-400",
+  };
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] ?? "bg-white/10 text-muted"}`}>
+      {status}
+    </span>
+  );
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -61,20 +74,49 @@ export default function DashboardPage() {
 
   const [latestPost, setLatestPost] = useState<any>(null);
   const [toast, setToast] = useState("");
+  const [scrapeRuns, setScrapeRuns] = useState<any[]>([]);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const showToast = (message: string) => {
     setToast(message);
     setTimeout(() => setToast(""), 3500);
   };
 
+  const loadRuns = async () => {
+    try {
+      const res = await api.getScrapeRuns();
+      setScrapeRuns(res.runs ?? []);
+      return res.runs ?? [];
+    } catch {
+      return [];
+    }
+  };
+
+  const startPolling = () => {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      const runs = await loadRuns();
+      const stillRunning = runs.some((r: any) => r.status === "running");
+      if (!stillRunning) {
+        clearInterval(pollRef.current!);
+        pollRef.current = null;
+        // Refresh summary counts when scrape finishes
+        api.getSummary().then(r => setSummary(r.summary)).catch(() => {});
+      }
+    }, 3000);
+  };
+
   useEffect(() => {
-    Promise.all([api.getSummary(), api.getCallStatus()])
-      .then(([summaryResponse, callResponse]) => {
+    Promise.all([api.getSummary(), api.getCallStatus(), api.getScrapeRuns()])
+      .then(([summaryResponse, callResponse, runsResponse]) => {
         setSummary(summaryResponse.summary);
         setCallsEnabled(callResponse.configured);
+        setScrapeRuns(runsResponse.runs ?? []);
+        if ((runsResponse.runs ?? []).some((r: any) => r.status === "running")) startPolling();
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
   const doScrape = async () => {
@@ -82,7 +124,9 @@ export default function DashboardPage() {
     setScraping(true);
     try {
       await api.startScrape(scrapeMarket, scrapeType);
-      showToast(`Scraping ${scrapeMarket}/${scrapeType} started. Check the terminal for progress.`);
+      showToast(`Scraping ${scrapeMarket} / ${scrapeType} started…`);
+      await loadRuns();
+      startPolling();
     } catch (error: any) {
       showToast(error.message);
     }
@@ -156,6 +200,43 @@ export default function DashboardPage() {
         />
         <ActionBtn label="Generate Today's Post" onClick={doGeneratePost} loading={generating} />
       </div>
+
+      {scrapeRuns.length > 0 && (
+        <div className="mb-8 rounded-xl border border-border bg-surface">
+          <div className="flex items-center justify-between border-b border-border px-5 py-3">
+            <h3 className="text-sm font-semibold text-white">Recent Scrapes</h3>
+            {scrapeRuns.some(r => r.status === "running") && (
+              <span className="flex items-center gap-1.5 text-xs text-yellow-300">
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-yellow-400" />
+                Running…
+              </span>
+            )}
+          </div>
+          <div className="divide-y divide-border">
+            {scrapeRuns.slice(0, 8).map((run: any) => (
+              <div key={run.id} className="flex items-center justify-between px-5 py-3 text-sm">
+                <div className="flex items-center gap-3">
+                  <ScrapeStatusBadge status={run.status} />
+                  <span className="font-medium text-white capitalize">{run.market}</span>
+                  <span className="text-muted">·</span>
+                  <span className="text-muted capitalize">{run.lead_type}</span>
+                </div>
+                <div className="flex items-center gap-4 text-right">
+                  {run.leads_found != null && (
+                    <span className="text-green-300 font-medium">+{run.leads_found} leads</span>
+                  )}
+                  {run.error && (
+                    <span className="max-w-xs truncate text-red-400 text-xs">{run.error}</span>
+                  )}
+                  <span className="text-xs text-muted">
+                    {new Date(run.started_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {latestPost && (
         <div className="space-y-3 rounded-xl border border-border bg-surface p-6">
