@@ -27,7 +27,7 @@ APIFY_BASE  = "https://api.apify.com/v2"
 
 # ── Actors per market ─────────────────────────────────────────────────────────
 ACTORS = {
-    "us_craigslist": "vaclavrut/craigslist-scraper",
+    "us_craigslist": "ivanvs/craigslist-scraper",
     "us_zillow":     "maxcopell/zillow-scraper",
     "dubai":         "epctex/dubizzle-scraper",
     "uk":            "epctex/gumtree-scraper",
