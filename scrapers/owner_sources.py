@@ -27,7 +27,7 @@ APIFY_BASE  = "https://api.apify.com/v2"
 
 # ── Actors per market ─────────────────────────────────────────────────────────
 ACTORS = {
-    "us_craigslist": "ivanvs/craigslist-scraper",
+    "us_craigslist": "automation-lab/craigslist-scraper",
     "us_zillow":     "maxcopell/zillow-scraper",
     "dubai":         "epctex/dubizzle-scraper",
     "uk":            "epctex/gumtree-scraper",
@@ -173,11 +173,10 @@ def _scrape_us_zillow(cities: list[str], max_per_city: int = 50) -> list[dict]:
         console.print(f"  City: [yellow]{city}[/yellow]")
         city_slug = city.lower().replace(" ", "-")
         input_payload = {
-            "startUrls": [
-                {"url": f"https://www.zillow.com/homes/for_rent/{city_slug}_rb/?isForRentByOwner=true"}
+            "searchUrls": [
+                {"url": f"https://www.zillow.com/{city_slug}-rentals/?searchQueryState=%7B%22isForRent%22%3Atrue%7D"}
             ],
-            "maxItems": max_per_city,
-            "type": "FOR_RENT",
+            "maxResults": max_per_city,
         }
 
         items = _run_actor(ACTORS["us_zillow"], input_payload, max_wait_s=240)
