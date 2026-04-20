@@ -58,7 +58,7 @@ def _run_actor(actor_id: str, input_payload: dict, max_wait_s: int = 300) -> lis
 
     # Start run
     resp = session.post(
-        f"{APIFY_BASE}/acts/{actor_id}/runs",
+        f"{APIFY_BASE}/acts/{actor_id.replace('/', '~')}/runs",
         json={"input": input_payload},
         timeout=30,
     )
@@ -74,7 +74,7 @@ def _run_actor(actor_id: str, input_payload: dict, max_wait_s: int = 300) -> lis
     deadline = time.time() + max_wait_s
     while time.time() < deadline:
         time.sleep(8)
-        status_resp = session.get(f"{APIFY_BASE}/actor-runs/{run_id}", timeout=15)
+        status_resp = session.get(f"{APIFY_BASE}/actor-runs/{run_id}", timeout=15)  # run_id is a UUID, no ~ needed
         status = status_resp.json()["data"]["status"]
         console.print(f"  [dim]Status: {status}[/dim]")
         if status in ("SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"):
