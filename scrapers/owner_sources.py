@@ -124,11 +124,10 @@ def _scrape_us_craigslist(cities: list[str], max_per_city: int = 100) -> list[di
         # Craigslist city slug (lowercase, no spaces)
         slug = city.lower().replace(" ", "")
         input_payload = {
-            "startUrls": [
+            "searchUrls": [
                 {"url": f"https://{slug}.craigslist.org/search/apa?by_owner=1&availabilityMode=0"}
             ],
             "maxItems": max_per_city,
-            "extendOutputFunction": "($) => { return {}; }",
         }
 
         items = _run_actor(ACTORS["us_craigslist"], input_payload, max_wait_s=180)
