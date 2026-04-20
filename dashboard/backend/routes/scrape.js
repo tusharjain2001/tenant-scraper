@@ -10,6 +10,12 @@ const OUTPUT_DIR   = path.join(SCRAPER_ROOT, "output");
 const MODULE2      = path.join(SCRAPER_ROOT, "module2-email-sender");
 const MODULE2_ENV  = path.join(MODULE2, ".env");
 
+// On startup, mark any orphaned "running" rows as error (leftover from a previous server session)
+supabase.from("scrape_runs")
+  .update({ status: "error", error: "Server restarted while scrape was running", finished_at: new Date().toISOString() })
+  .eq("status", "running")
+  .then(({ error }) => { if (error) console.error("[SCRAPE] Orphan cleanup failed:", error.message); });
+
 const PYTHON = process.platform === "win32"
   ? "C:\\Users\\Intel\\AppData\\Local\\Programs\\Python\\Python312\\python.exe"
   : "python3";
