@@ -59,7 +59,7 @@ def _run_actor(actor_id: str, input_payload: dict, max_wait_s: int = 300) -> lis
     # Start run
     resp = session.post(
         f"{APIFY_BASE}/acts/{actor_id.replace('/', '~')}/runs",
-        json={"input": input_payload},
+        json=input_payload,
         timeout=30,
     )
     if resp.status_code not in (200, 201):
